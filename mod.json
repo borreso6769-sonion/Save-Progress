@@ -1,0 +1,11 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"win": "2.2081"
+	},
+	"id": "usuario.progress-tracker",
+	"name": "Progress Tracker",
+	"version": "v1.0.0",
+	"developer": "Usuario",
+	"description": "Guarda automaticamente tus intentos (inicio-final en %) de los niveles que actives desde el menu de pausa."
+}
