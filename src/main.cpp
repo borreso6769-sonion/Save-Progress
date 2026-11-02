@@ -66,6 +66,14 @@ namespace {
         return -static_cast<int>(h % 1000000000u) - 1;
     }
 
+    // Copia visible para el navegador: C:\Users\TuUsuario\GeodeProgress\progress.json
+    // (el navegador no deja elegir archivos dentro de AppData ni Program Files)
+    std::filesystem::path userCopyDir() {
+        auto e = std::getenv("USERPROFILE");
+        if (!e) return {};
+        return std::filesystem::path(e) / "GeodeProgress";
+    }
+
     Lvl& ensureLevel(GJGameLevel* lvl) {
         auto& l = g_levels[keyFor(lvl)];
         l.name = clean(lvl->m_levelName.c_str());
@@ -111,6 +119,13 @@ namespace {
         json += "}}";
         writeAtomic(dir / "store.txt", store);
         writeAtomic(dir / "progress.json", json);
+
+        auto copyDir = userCopyDir();
+        if (!copyDir.empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(copyDir, ec);
+            if (!ec) writeAtomic(copyDir / "progress.json", json);
+        }
     }
 
     void loadAll() {
@@ -218,7 +233,14 @@ protected:
     }
 
     void onFolder(CCObject*) {
-        file::openFolder(Mod::get()->getSaveDir());
+        auto d = userCopyDir();
+        if (!d.empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(d, ec);
+            file::openFolder(d);
+        } else {
+            file::openFolder(Mod::get()->getSaveDir());
+        }
     }
 
 public:
