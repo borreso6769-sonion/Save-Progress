@@ -5,7 +5,15 @@
 	},
 	"id": "usuario.progress-tracker",
 	"name": "Progress Tracker",
-	"version": "v1.0.0",
+	"version": "v1.1.0",
 	"developer": "Usuario",
-	"description": "Guarda automaticamente tus intentos (inicio-final en %) de los niveles que actives desde el menu de pausa."
+	"description": "Guarda automaticamente tus intentos (inicio-final en %) de los niveles que actives desde el menu de pausa.",
+	"settings": {
+		"detect-cheats": {
+			"type": "bool",
+			"name": "Ignorar intentos con noclip o speedhack",
+			"description": "Si detecta noclip o speedhack durante un intento, no lo guarda y te avisa. Apagalo si te descarta intentos limpios.",
+			"default": true
+		}
+	}
 }
