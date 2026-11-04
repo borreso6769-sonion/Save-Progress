@@ -3,6 +3,7 @@
 #include <Geode/modify/PauseLayer.hpp>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <map>
 #include <string>
@@ -152,6 +153,11 @@ namespace {
         }
     }
 
+    bool isTracked(PlayLayer* pl) {
+        auto it = g_levels.find(keyFor(pl->m_level));
+        return it != g_levels.end() && it->second.active;
+    }
+
     void recordRun(PlayLayer* pl, int a, int b) {
         if (pl->m_isTestMode) return;
         auto it = g_levels.find(keyFor(pl->m_level));
@@ -283,30 +289,85 @@ class $modify(PTPauseLayer, PauseLayer) {
 class $modify(PTPlayLayer, PlayLayer) {
     struct Fields {
         int startPct = 0;
+        float lastX = 0.f;
+        bool gotStart = false;
         bool recorded = false;
+        bool cheat = false;
     };
+
+    static void onModify(auto& self) {
+        // Nuestro hook envuelve a los de otros mods: asi vemos el resultado final
+        // (si un noclip impidio la muerte, o si otro mod movio al jugador al inicio).
+        (void)self.setHookPriority("PlayLayer::destroyPlayer", Priority::VeryEarly);
+        (void)self.setHookPriority("PlayLayer::postUpdate", Priority::VeryEarly);
+    }
 
     void resetLevel() {
         PlayLayer::resetLevel();
         m_fields->startPct = static_cast<int>(this->getCurrentPercent());
+        m_fields->lastX = m_player1 ? m_player1->getPositionX() : 0.f;
+        m_fields->gotStart = false;
         m_fields->recorded = false;
+        m_fields->cheat = false;
+    }
+
+    void postUpdate(float dt) {
+        PlayLayer::postUpdate(dt);
+        if (!m_player1) return;
+
+        // Speedhack: la escala de tiempo no coincide con la del propio juego
+        // (los triggers de time warp legitimos si cuadran con m_timeWarp).
+        float ts = CCDirector::get()->getScheduler()->getTimeScale();
+        float tw = m_gameState.m_timeWarp;
+        if (std::fabs(ts - 1.f) > 0.001f && std::fabs(ts - tw) > 0.01f) {
+            m_fields->cheat = true;
+        }
+
+        // Porcentaje de inicio: el de la primera vez que el jugador se mueve tras el reinicio.
+        // (Asi cuenta tambien cuando otro mod te coloca en un startpos despues del reset.)
+        if (!m_fields->gotStart && !m_player1->m_isDead) {
+            float x = m_player1->getPositionX();
+            if (std::fabs(x - m_fields->lastX) > 0.001f) {
+                m_fields->gotStart = true;
+                m_fields->startPct = static_cast<int>(this->getCurrentPercent() + 0.05f);
+            }
+            m_fields->lastX = x;
+        }
+    }
+
+    void finishRun(int a, int b) {
+        if (!isTracked(this)) return;
+        if (m_fields->cheat && Mod::get()->getSettingValue<bool>("detect-cheats")) {
+            Notification::create("Intento no guardado (noclip o speedhack detectado)",
+                NotificationIcon::Warning, 1.5f)->show();
+            return;
+        }
+        recordRun(this, a, b);
     }
 
     void destroyPlayer(PlayerObject* player, GameObject* object) {
         int end = static_cast<int>(this->getCurrentPercent());
         bool already = m_fields->recorded;
+        bool wasDead = player->m_isDead;
+        bool ending = m_levelEndAnimationStarted;
         PlayLayer::destroyPlayer(player, object);
+
+        // Noclip: el juego pidio matar al jugador pero sigue vivo.
+        if (!wasDead && !ending && object != m_anticheatSpike && !player->m_isDead) {
+            m_fields->cheat = true;
+            return;
+        }
         if (already) return;
         if ((m_player1 && m_player1->m_isDead) || (m_player2 && m_player2->m_isDead)) {
             m_fields->recorded = true;
-            recordRun(this, m_fields->startPct, end);
+            finishRun(m_fields->startPct, end);
         }
     }
 
     void levelComplete() {
         if (!m_fields->recorded) {
             m_fields->recorded = true;
-            recordRun(this, m_fields->startPct, 100);
+            finishRun(m_fields->startPct, 100);
         }
         PlayLayer::levelComplete();
     }
